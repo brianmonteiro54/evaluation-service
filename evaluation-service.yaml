@@ -1,0 +1,144 @@
+# ==============================================================================
+# EVALUATION SERVICE - TEMPLATE
+# ==============================================================================
+# Descrição: Avaliação de Feature Flags (Node.js)
+# Porta: 8003
+# ==============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: togglemaster-config
+  namespace: togglemaster-evaluation
+  labels:
+    app.kubernetes.io/name: evaluation-service
+    app.kubernetes.io/component: evaluation
+    app.kubernetes.io/part-of: togglemaster
+data:
+  FLAG_SERVICE_URL: "${FLAG_SERVICE_URL}"
+  TARGETING_SERVICE_URL: "${TARGETING_SERVICE_URL}"
+  AUTH_SERVICE_URL: "${AUTH_SERVICE_URL}"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+  namespace: togglemaster-evaluation
+  labels:
+    app.kubernetes.io/name: evaluation-service
+    app.kubernetes.io/component: evaluation
+    app.kubernetes.io/part-of: togglemaster
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evaluation-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evaluation-service
+        app.kubernetes.io/component: evaluation
+        app.kubernetes.io/part-of: togglemaster
+    spec:
+      containers:
+        - name: evaluation-service
+          image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/evaluation-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8003
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8003"
+            - name: APP_ENV
+              value: "production"
+            - name: FLAG_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: FLAG_SERVICE_URL
+            - name: TARGETING_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: TARGETING_SERVICE_URL
+            - name: AUTH_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: AUTH_SERVICE_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evaluation-service
+  namespace: togglemaster-evaluation
+  labels:
+    app.kubernetes.io/name: evaluation-service
+    app.kubernetes.io/component: evaluation
+    app.kubernetes.io/part-of: togglemaster
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: evaluation-service
+  ports:
+    - name: http
+      port: 8003
+      targetPort: 8003
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: evaluation-service-ingress
+  namespace: togglemaster-evaluation
+  labels:
+    app.kubernetes.io/name: evaluation-service
+    app.kubernetes.io/component: evaluation
+    app.kubernetes.io/part-of: togglemaster
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ${DOMAIN_NAME}
+      http:
+        paths:
+          - path: /evaluate(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: evaluation-service
+                port:
+                  number: 8003
