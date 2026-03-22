@@ -577,7 +577,7 @@ func TestFetchRule_HTTPError(t *testing.T) {
 func TestFetchFlag_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{invalid-json"))
+		_, _ = w.Write([]byte("{invalid-json"))
 	}))
 	defer srv.Close()
 
@@ -597,7 +597,7 @@ func TestFetchFlag_InvalidJSON(t *testing.T) {
 func TestFetchRule_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{invalid-json"))
+		_, _ = w.Write([]byte("{invalid-json"))
 	}))
 	defer srv.Close()
 
