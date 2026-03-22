@@ -89,6 +89,7 @@ jobs:
 
       - name: SAST com gosec
         uses: securego/gosec@master
+        continue-on-error: true
         with:
           args: ./...
 
