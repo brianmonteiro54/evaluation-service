@@ -93,7 +93,7 @@ jobs:
           args: ./...
 
       - name: SCA com Trivy (filesystem)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
@@ -127,7 +127,7 @@ jobs:
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
 
       - name: Scan da imagem com Trivy
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           format: table
