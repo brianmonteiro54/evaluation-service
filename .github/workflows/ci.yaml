@@ -1,0 +1,146 @@
+name: CI-CD
+
+on:
+  pull_request:
+    branches:
+      - main
+      - deveop
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  GO_VERSION: "1.22"
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: evaluation-service
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache de dependências Go
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Baixar dependências
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Rodar testes unitários
+        run: go test ./... -cover
+
+  lint:
+    name: Linter / Static Analysis
+    runs-on: ubuntu-latest
+    needs: build-test
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Rodar golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  security-scan:
+    name: Security Scan (SAST & SCA)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: SAST com gosec
+        uses: securego/gosec@master
+        continue-on-error: true
+        with:
+          args: ./...
+
+      - name: SCA com Trivy (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+
+  docker-build-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build da imagem Docker
+        run: |
+          docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+
+      - name: Scan da imagem com Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+
+      - name: Tag da imagem para ECR
+        run: |
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG \
+          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Push da imagem para ECR
+        run: |
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
