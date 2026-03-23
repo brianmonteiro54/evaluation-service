@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-      - deveop
+      - develop
   push:
     branches:
       - main
@@ -117,6 +117,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login no Amazon ECR
@@ -139,7 +140,7 @@ jobs:
       - name: Tag da imagem para ECR
         run: |
           docker tag $ECR_REPOSITORY:$IMAGE_TAG \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Push da imagem para ECR
         run: |
