@@ -18,7 +18,7 @@ permissions:
 env:
   GO_VERSION: "1.22"
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: evaluation-service
+  ECR_REPOSITORY: togglemaster/${{ github.event.repository.name }}
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
