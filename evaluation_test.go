@@ -55,7 +55,11 @@ func TestHealthHandler(t *testing.T) {
 	app.healthHandler(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("erro ao fechar response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status esperado %d, obtido %d", http.StatusOK, resp.StatusCode)
