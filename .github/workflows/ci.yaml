@@ -145,3 +145,25 @@ jobs:
       - name: Push da imagem para ECR
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Atualizar imagem no repo de deploy
+        run: |
+          FULL_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"
+
+          git clone https://x-access-token:${{ secrets.DEPLOY_REPO_TOKEN }}@github.com/${{ github.repository_owner }}/deploy-evaluation-service.git deploy-repo
+          cd deploy-repo
+
+          echo "=== ANTES ==="
+          grep "image:.*evaluation-service" manifests/deployment.yaml
+
+          sed -i "s|image:.*evaluation-service:.*|image: ${FULL_IMAGE}|" manifests/deployment.yaml
+
+          echo "=== DEPOIS ==="
+          grep "image:.*evaluation-service" manifests/deployment.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifests/deployment.yaml
+          git diff --cached --quiet && echo "SEM MUDANCAS - sed nao alterou nada" && exit 1
+          git commit -m "deploy: evaluation-service ${GITHUB_SHA::8}"
+          git push origin main
