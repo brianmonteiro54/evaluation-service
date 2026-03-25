@@ -15,6 +15,57 @@ Ele funciona da seguinte forma:
 5.  Retorna `true` ou `false` para o cliente.
 6.  Envia *assincronamente* um evento da decisão para uma fila **AWS SQS**.
 
+Microsserviço de avaliação de feature flags da plataforma **ToggleMaster**, responsável por decidir em tempo real se uma flag está ativa para um determinado contexto de usuário.
+ 
+## Visão Geral
+ 
+O Evaluation Service é o ponto de decisão do ToggleMaster. Ele recebe um contexto (usuário, atributos) e consulta as flags e regras de targeting para retornar se a flag está ligada ou desligada. Utiliza Redis como cache para alta performance e envia eventos de avaliação para uma fila SQS, que são processados pelo Analytics Service.
+ 
+## Tecnologias
+ 
+| Componente | Tecnologia |
+|---|---|
+| Linguagem | Go 1.22+ |
+| Cache | Redis (ElastiCache) |
+| Mensageria | Amazon SQS |
+| Container | Docker (multi-stage build) |
+| Orquestração | Kubernetes (EKS) |
+| Registry | Amazon ECR |
+| CI/CD | GitHub Actions + ArgoCD (GitOps) |
+ 
+## Endpoints
+ 
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/health` | Health check do serviço |
+| `POST` | `/evaluate` | Avalia uma flag para um contexto de usuário |
+ 
+## Variáveis de Ambiente
+ 
+| Variável | Descrição |
+|---|---|
+| `PORT` | Porta do serviço (padrão: `8004`) |
+| `REDIS_URL` | URL de conexão do Redis |
+| `FLAG_SERVICE_URL` | URL do Flag Service |
+| `TARGETING_SERVICE_URL` | URL do Targeting Service |
+| `AUTH_SERVICE_URL` | URL do Auth Service |
+| `AWS_SQS_URL` | URL da fila SQS para eventos de avaliação |
+| `AWS_REGION` | Região AWS |
+ 
+## Pipeline CI/CD (DevSecOps)
+ 
+O workflow do GitHub Actions executa os seguintes estágios:
+ 
+1. **Build & Unit Test** — Compilação e execução dos testes unitários
+2. **Linter** — Análise estática com `golangci-lint`
+3. **Security Scan** — SAST com `gosec` + SCA com `Trivy` (bloqueia vulnerabilidades críticas)
+4. **Docker Build & Push** — Build da imagem, scan com Trivy e push para o ECR
+5. **GitOps Update** — Atualiza a tag da imagem no repositório `deploy-evaluation-service`
+ 
+## Deploy (GitOps)
+ 
+O deploy segue o modelo GitOps com ArgoCD. Ao final do pipeline de CI, a tag da imagem é atualizada automaticamente no repositório [`deploy-evaluation-service`](https://github.com/brianmonteiro54/deploy-evaluation-service), e o ArgoCD sincroniza a mudança no cluster EKS.
+
 ## 📦 Pré-requisitos (Local)
 
 * [Go](https://go.dev/doc/install) (versão 1.21 ou superior)
