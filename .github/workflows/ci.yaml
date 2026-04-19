@@ -17,7 +17,7 @@ permissions:
   security-events: write
 
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.25"
   AWS_REGION: us-east-1
   ECR_REPOSITORY: togglemaster/${{ github.event.repository.name }}
   IMAGE_TAG: ${{ github.sha }}
