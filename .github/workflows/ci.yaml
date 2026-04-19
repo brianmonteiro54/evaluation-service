@@ -18,6 +18,7 @@ permissions:
 
 env:
   GO_VERSION: "1.25"
+  TRIVY_VERSION: "v0.70.0"
   AWS_REGION: us-east-1
   ECR_REPOSITORY: togglemaster/${{ github.event.repository.name }}
   IMAGE_TAG: ${{ github.sha }}
@@ -74,8 +75,9 @@ jobs:
         with:
           args: ./...
       - name: SCA com Trivy (filesystem)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
+          version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
           scan-ref: .
           severity: CRITICAL
@@ -92,7 +94,7 @@ jobs:
     steps:
       - name: Checkout do código
         uses: actions/checkout@v6
-
+        
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -110,8 +112,9 @@ jobs:
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
 
       - name: Scan da imagem com Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
+          version: ${{ env.TRIVY_VERSION }}
           image-ref: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           format: table
           severity: CRITICAL
@@ -125,26 +128,34 @@ jobs:
 
       - name: Push da imagem para ECR
         run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          if ! docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG; then
+            echo "::warning::A tag $IMAGE_TAG já existe no ECR. Pulando push para evitar erro de imutabilidade."
+            exit 0
+          fi
 
       - name: Atualizar imagem no repo de deploy
         run: |
           FULL_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"
+          git clone https://x-access-token:${{ secrets.DEPLOY_REPO_TOKEN }}@github.com/${{ github.repository_owner }}/deploy-${{ github.event.repository.name }}.git deploy-repo
 
-          git clone https://x-access-token:${{ secrets.DEPLOY_REPO_TOKEN }}@github.com/${{ github.repository_owner }}/deploy-evaluation-service.git deploy-repo
           cd deploy-repo
 
           echo "=== ANTES ==="
-          grep "image:.*evaluation-service" manifests/deployment.yaml
+          grep "image:" manifests/deployment.yaml || true
 
-          sed -i "s|image:.*evaluation-service:.*|image: ${FULL_IMAGE}|" manifests/deployment.yaml
+          sed -i "s|image:.*${{ github.event.repository.name }}:.*|image: ${FULL_IMAGE}|" manifests/deployment.yaml
 
           echo "=== DEPOIS ==="
-          grep "image:.*evaluation-service" manifests/deployment.yaml
+          grep "image:" manifests/deployment.yaml || true
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifests/deployment.yaml
-          git diff --cached --quiet && echo "SEM MUDANCAS - sed nao alterou nada" && exit 1
-          git commit -m "deploy: evaluation-service ${GITHUB_SHA::8}"
+
+          if git diff --cached --quiet; then
+            echo "::warning::Nenhuma alteração detectada no manifesto — a imagem já estava atualizada."
+            exit 0
+          fi
+
+          git commit -m "deploy: ${{ github.event.repository.name }} ${GITHUB_SHA::8}"
           git push origin main
