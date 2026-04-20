@@ -40,7 +40,7 @@ type App struct {
 func initOTel(ctx context.Context) (func(), error) {
 	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if otelEndpoint == "" {
-		otelEndpoint = "otel-collector.monitoring.svc.cluster.local:4317"
+		otelEndpoint = "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"
 	}
 
 	res, _ := resource.New(ctx, resource.WithAttributes(
