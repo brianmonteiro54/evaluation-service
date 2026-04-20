@@ -13,6 +13,8 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -188,6 +190,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", app.healthHandler)
 	mux.HandleFunc("/evaluate", app.evaluationHandler)
+
+	// Expõe /metrics para o Prometheus (ServiceMonitor faz scrape aqui)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Wrap com OTel
 	handler := otelhttp.NewHandler(mux, "evaluation-service")
